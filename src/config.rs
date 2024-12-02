@@ -1,5 +1,6 @@
-use aws_config::meta::region::RegionProviderChain;
-use aws_types::SdkConfig;
+use aws_sdk_ec2::config::Builder as Ec2ConfigBuilder;
+use aws_sdk_ec2::config::Region;
+use aws_sdk_ec2::Client;
 use std::env;
 
 /// Holds application-wide configuration
@@ -11,6 +12,7 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
+    /// Load configuration from environment variables
     pub fn from_env() -> Self {
         Self {
             aws_region: env::var("AWS_REGION").ok(),
@@ -21,22 +23,25 @@ impl AppConfig {
         }
     }
 
-    pub async fn aws_sdk_config(&self) -> SdkConfig {
-        // Set up RegionProviderChain: Environment > AWS Config Defaults
-        let region_provider = if let Some(region) = &self.aws_region {
-            RegionProviderChain::first_try(Some(aws_sdk_ec2::Region::new(region.clone())))
-        } else {
-            RegionProviderChain::default_provider()
-        };
+    /// Initialize the AWS SDK EC2 client configuration
+    pub async fn aws_ec2_client(&self) -> Client {
+        // Set the AWS region, falling back to `us-east-1` if none is provided
+        let region = Region::new(
+            self.aws_region
+                .clone()
+                .unwrap_or_else(|| "us-east-1".to_string()),
+        );
+        let region_config = Region::new(region);
 
-        // Initialize AWS SDK config loader
-        let mut config_loader = aws_config::from_env().region(region_provider);
-
-        // Apply AWS_PROFILE if specified
+        // Set the AWS_PROFILE if provided
         if let Some(profile) = &self.aws_profile {
-            config_loader = config_loader.profile_name(profile);
+            env::set_var("AWS_PROFILE", profile);
         }
 
-        config_loader.load().await
+        // Build the EC2 configuration
+        let ec2_config = Ec2ConfigBuilder::new().region(region_config).build();
+
+        // Return an EC2 client
+        Client::from_conf(ec2_config)
     }
 }

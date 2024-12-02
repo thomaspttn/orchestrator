@@ -1,7 +1,9 @@
 mod config;
+mod instances;
 
 use aws_sdk_ec2::Client as Ec2Client;
 use config::AppConfig;
+use instances::availability::AvailabilityChecker;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,6 +31,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test AWS connection by listing regions
     let regions = ec2_client.describe_regions().send().await?;
     log::info!("Available regions: {:?}", regions.regions());
+
+    let checker = AvailabilityChecker::new(ec2_client);
+
+    // Check availability for a specific instance type
+    checker
+        .check_availability("t3.micro")
+        .await
+        .expect("Failed to check instance availability");
 
     Ok(())
 }
